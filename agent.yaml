@@ -12,7 +12,7 @@ metadata:
     - Bing Grounding
     - Microsoft Agent Framework
   authors:
-    - jeomhove
+    - referencenull
 template:
   name: WebSearchAgent
   kind: hosted
@@ -21,9 +21,9 @@ template:
       version: v1
   environment_variables:
     - name: AZURE_AI_PROJECT_ENDPOINT
-      value: ${AZURE_AI_PROJECT_ENDPOINT}
+      value: $https://agenticwebinar-resource.services.ai.azure.com/api/projects/agenticwebinar
     - name: BING_GROUNDING_CONNECTION_ID
-      value: ${BING_GROUNDING_CONNECTION_ID}
+      value: $subscriptions/af27b7c9-0570-46ed-9bb7-49786ebbcbfc/resourceGroups/rg-jukarvon-2081/providers/Microsoft.CognitiveServices/accounts/agenticwebinar-resource/projects/agenticwebinar/connections/searchagentwebinarwx2lzp
     - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
       value: "{{chat}}"
 resources:
