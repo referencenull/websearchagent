@@ -1,45 +1,114 @@
-import os
-from dotenv import load_dotenv
-from agent_framework import ChatAgent, HostedWebSearchTool
-from agent_framework_azure_ai import AzureAIAgentClient
+# Copyright (c) Microsoft. All rights reserved.
+
+import asyncio
+from collections.abc import AsyncIterable
+from typing import Any
+
+from agent_framework import (
+    AgentResponse,
+    AgentResponseUpdate,
+    AgentRunInputs,
+    AgentSession,
+    BaseAgent,
+    Content,
+    Message,
+    normalize_messages,
+)
 from azure.ai.agentserver.agentframework import from_agent_framework
-from azure.identity.aio import DefaultAzureCredential
 
-# Load environment variables from .env file for local development
-load_dotenv()
+"""
+Custom Agent Implementation Example
 
-def create_agent() -> ChatAgent:
-    """Create and return a ChatAgent with Bing Grounding search tool."""
-    assert "AZURE_AI_PROJECT_ENDPOINT" in os.environ, (
-        "AZURE_AI_PROJECT_ENDPOINT environment variable must be set."
-    )
-    assert "AZURE_AI_MODEL_DEPLOYMENT_NAME" in os.environ, (
-        "AZURE_AI_MODEL_DEPLOYMENT_NAME environment variable must be set."
-    )
-    assert "BING_GROUNDING_CONNECTION_ID" in os.environ, (
-        "BING_GROUNDING_CONNECTION_ID environment variable must be set to use HostedWebSearchTool."
-    )
-    
-    chat_client = AzureAIAgentClient(
-        project_endpoint=os.environ["AZURE_AI_PROJECT_ENDPOINT"],
-        credential=DefaultAzureCredential(),
-    )
+This sample demonstrates implementing a custom agent by extending BaseAgent class,
+showing the minimal requirements for both streaming and non-streaming responses.
+"""
 
-    bing_search_tool = HostedWebSearchTool(
-        name="Bing Grounding Search",
-        description="Search the web for current information using Bing",
-        connection_id=os.environ["BING_GROUNDING_CONNECTION_ID"],
-    )
 
-    agent = ChatAgent(
-        chat_client=chat_client,
-        name="BingSearchAgent",
-        instructions=(
-            "You are a helpful assistant that can search the web for current information. "
-            "Use the Bing search tool to find up-to-date information and provide accurate, "
-            "well-sourced answers. Always cite your sources when possible."
-        ),
-        tools=bing_search_tool,
+class EchoAgent(BaseAgent):
+    """A simple custom agent that echoes user messages with a prefix.
+
+    This demonstrates how to create a fully custom agent by extending BaseAgent
+    and implementing the required run() and run_stream() methods.
+    """
+
+    def __init__(
+        self,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        echo_prefix: str = "Echo: ",
+        **kwargs: Any,
+    ) -> None:
+        """Initialize the EchoAgent.
+
+        Args:
+            name: The name of the agent.
+            description: The description of the agent.
+            echo_prefix: The prefix to add to echoed messages.
+            **kwargs: Additional keyword arguments passed to BaseAgent.
+        """
+        self.echo_prefix = echo_prefix
+        super().__init__(
+            name=name,
+            description=description,
+            **kwargs,
+        )
+
+    async def run(
+        self,
+        messages: AgentRunInputs | None = None,
+        *,
+        stream: bool = False,
+        session: AgentSession | None = None,
+        **kwargs: Any,
+    ) -> AgentResponse | AsyncIterable[AgentResponseUpdate]:
+        """Execute the agent and return either a complete or streaming response.
+
+        Args:
+            messages: The message(s) to process.
+            stream: Whether to stream the response incrementally.
+            session: The conversation session (optional).
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            Either an AgentResponse or an async iterable of AgentResponseUpdate chunks.
+        """
+        del session, kwargs
+
+        normalized_messages = normalize_messages(messages)
+
+        if not normalized_messages:
+            response_text = "Hello! I'm a custom echo agent. Send me a message and I'll echo it back."
+        else:
+            last_message = normalized_messages[-1]
+            if last_message.text:
+                response_text = f"{self.echo_prefix}{last_message.text}"
+            else:
+                response_text = f"{self.echo_prefix}[Non-text message received]"
+
+        if stream:
+            return self._stream_response(response_text)
+
+        response_message = Message("assistant", [response_text], author_name=self.name)
+        return AgentResponse(messages=[response_message], agent_id=self.id)
+
+    async def _stream_response(self, response_text: str) -> AsyncIterable[AgentResponseUpdate]:
+        words = response_text.split()
+        for i, word in enumerate(words):
+            chunk_text = f" {word}" if i > 0 else word
+
+            yield AgentResponseUpdate(
+                contents=[Content.from_text(chunk_text)],
+                role="assistant",
+                author_name=self.name,
+            )
+
+            await asyncio.sleep(0.1)
+
+
+def create_agent() -> EchoAgent:
+    agent = EchoAgent(
+        name="EchoBot", description="A simple agent that echoes messages with a prefix", echo_prefix="🔊 Echo: "
     )
     return agent
 
